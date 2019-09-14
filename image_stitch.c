@@ -13,18 +13,21 @@ typedef struct my_error_mgr * my_error_ptr;
 
 int origin_x;
 int origin_y;
+int limit_x;
+int limit_y;
 static int line = 0;
 
 
-#define PANEL_X (5906)
-#define PANEL_Y (5906)
+#define PANEL_50  (5906)
+#define PANEL_75  (8859)
+#define PANEL_100 (5906*2)
 
-unsigned char panel_set_buffer[PANEL_Y*2][PANEL_X*3][3];
+unsigned char panel_set_buffer[PANEL_50*2][PANEL_50*3][3];
 
 void put_scanline_someplace(unsigned char *buffer, int stride) {
   fprintf(stderr,"\rLine %i", line);
-  if(line < PANEL_Y) {
-     memcpy(panel_set_buffer[origin_y+line][origin_x],buffer, (stride < PANEL_X*3 ? stride : PANEL_X*3));
+  if(line < limit_y) {
+     memcpy(panel_set_buffer[origin_y+line][origin_x],buffer, (stride < limit_x*3 ? stride : limit_x*3));
   }
   line++;
 }
@@ -52,25 +55,15 @@ void set_pixel(int x, int y, unsigned char r, unsigned char g, unsigned char b) 
 void borders(void) {
   int x,y;
 
-  for(x = 0; x < PANEL_X*3; x++) {
-     set_pixel(x,PANEL_Y*0+0,  0,0,0);
-     set_pixel(x,PANEL_Y*1-1,  0,0,0);
-
-     set_pixel(x,PANEL_Y*1+0,  0,0,0);
-     set_pixel(x,PANEL_Y*2-1,  0,0,0);
+  for(x = 0; x < limit_x; x++) {
+     set_pixel(origin_x+x,         origin_y,           0,0,0);
+     set_pixel(origin_x+x,         origin_y+limit_y-1, 0,0,0);
   }
 
-  for(y = 0; y < PANEL_X*2; y++) {
-     set_pixel(PANEL_X*0+0, y, 0,0,0);
-     set_pixel(PANEL_X*1-1, y, 0,0,0);
-
-     set_pixel(PANEL_X*1+0, y, 0,0,0);
-     set_pixel(PANEL_X*2-1, y, 0,0,0);
-
-     set_pixel(PANEL_X*2+0, y, 0,0,0);
-     set_pixel(PANEL_X*3-1, y, 0,0,0);
+  for(y =0 ; y < limit_y; y++) {
+     set_pixel(origin_x,           origin_y+y, 0,0,0);
+     set_pixel(origin_x+limit_x-1, origin_y+y, 0,0,0);
   }
-
 }
 /*****************************************************************/
 int readfile(char *filename) {
@@ -135,8 +128,8 @@ int  write_JPEG_file (char * filename, int quality)
   }
   jpeg_stdio_dest(&cinfo, outfile);
 
-  cinfo.image_width = PANEL_X*3; 	/* image width and height, in pixels */
-  cinfo.image_height = PANEL_Y*2;
+  cinfo.image_width = PANEL_50*3; 	/* image width and height, in pixels */
+  cinfo.image_height = PANEL_50*2;
   cinfo.input_components = 3;		/* # of color components per pixel */
   cinfo.in_color_space = JCS_RGB; 	/* colorspace of input image */
   jpeg_set_defaults(&cinfo);
@@ -145,7 +138,7 @@ int  write_JPEG_file (char * filename, int quality)
   cinfo.Y_density = 300;             /* Vertical pixel density */
   jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
   jpeg_start_compress(&cinfo, TRUE);
-  row_stride = PANEL_X * 3;	/* JSAMPLEs per row in image_buffer */
+  row_stride = PANEL_50 * 3;	/* JSAMPLEs per row in image_buffer */
 
   while (cinfo.next_scanline < cinfo.image_height) {
     row_pointer[0] = panel_set_buffer[cinfo.next_scanline][0];
@@ -158,19 +151,37 @@ int  write_JPEG_file (char * filename, int quality)
 }
 /*****************************************************************************/
 int main(int argc, char *argv[]) {
-   if(argc != 7) {
-      fprintf(stderr, "Please supply all six file names\n");
-      exit(0);
-   } 
    fprintf(stderr, "Emptying target image\n");
    memset(panel_set_buffer,255,sizeof(panel_set_buffer));
-   origin_x = PANEL_X*0; origin_y = PANEL_Y*0; if(!readfile(argv[1])) { fprintf(stderr, "Exiting with error\n"); }
-   origin_x = PANEL_X*1; origin_y = PANEL_Y*0; if(!readfile(argv[2])) { fprintf(stderr, "Exiting with error\n"); }
-   origin_x = PANEL_X*2; origin_y = PANEL_Y*0; if(!readfile(argv[3])) { fprintf(stderr, "Exiting with error\n"); }
-   origin_x = PANEL_X*0; origin_y = PANEL_Y*1; if(!readfile(argv[4])) { fprintf(stderr, "Exiting with error\n"); }
-   origin_x = PANEL_X*1; origin_y = PANEL_Y*1; if(!readfile(argv[5])) { fprintf(stderr, "Exiting with error\n"); }
-   origin_x = PANEL_X*2; origin_y = PANEL_Y*1; if(!readfile(argv[6])) { fprintf(stderr, "Exiting with error\n"); }
-   borders(); 
+   if(argc == 7) {  
+     /* 2x3 times 50x50 panels */
+     limit_x = PANEL_50;
+     limit_y = PANEL_50;
+     origin_x = PANEL_50*0; origin_y = PANEL_50*0; if(!readfile(argv[1])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+     origin_x = PANEL_50*1; origin_y = PANEL_50*0; if(!readfile(argv[2])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+     origin_x = PANEL_50*2; origin_y = PANEL_50*0; if(!readfile(argv[3])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+     origin_x = PANEL_50*0; origin_y = PANEL_50*1; if(!readfile(argv[4])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+     origin_x = PANEL_50*1; origin_y = PANEL_50*1; if(!readfile(argv[5])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+     origin_x = PANEL_50*2; origin_y = PANEL_50*1; if(!readfile(argv[6])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+   } else if(argc == 3) {
+     /* 75x100 side by side */
+     limit_x = PANEL_75;
+     limit_y = PANEL_50*2;
+     origin_x = PANEL_75*0; origin_y = 0; if(!readfile(argv[1])) { fprintf(stderr, "Exiting with error\n"); } borders();
+     origin_x = PANEL_75*1; origin_y = 0; if(!readfile(argv[2])) { fprintf(stderr, "Exiting with error\n"); } borders();
+   } else if(argc == 4) {
+     /* 50x50, 50x50, 100x100 */
+     limit_x = PANEL_50;
+     limit_y = PANEL_50;
+     origin_x = PANEL_50*0; origin_y = PANEL_50*0; if(!readfile(argv[1])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+     origin_x = PANEL_50*0; origin_y = PANEL_50*1; if(!readfile(argv[2])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+     limit_x = PANEL_100;
+     limit_y = PANEL_100;
+     origin_x = PANEL_50*1; origin_y = PANEL_50*0; if(!readfile(argv[3])) { fprintf(stderr, "Exiting with error\n"); } borders(); 
+   } else {
+      fprintf(stderr, "Please supply all six file names\n");
+      exit(0);
+   }
    write_JPEG_file("out.jpg",200);
    return 0;
 }
