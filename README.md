@@ -3,7 +3,7 @@
 For digital fabric printing, this hack to combines
 - six 50x50cm jpegs (@300 DPI) into a 150x100cm panel 
 - two 75x100cm jpegs (@300 DPI) into a 150x100 panel 
-- two 50x50cm jpegs (@300 DPI) into a 150x100 panel 
+- two 50x50cm jpegs and a 100cm x 100cm image (@300 DPI) into a 150x100 panel 
 
 Build "image_stitch" and then use:
 
