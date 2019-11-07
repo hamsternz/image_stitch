@@ -57,7 +57,7 @@ struct my_error_mgr {
 
 typedef struct my_error_mgr * my_error_ptr;
 
-static int line = 0;
+//static int line = 0;
 static int origin_x;
 static int origin_y;
 static int limit_x;
@@ -65,17 +65,36 @@ static int limit_y;
 
 
 /**************************************************************************/
-static void put_scanline_someplace(unsigned char *buffer, int stride) {
-  if(line %20 == 0) {
-     fprintf(stderr,"\rLine %i", line);
+static void put_scanline_someplace(int line, int col, unsigned char *buffer, int pixels) {
+  if(line < IMAGE_HEIGHT) {
+     int copy_size;
+     copy_size = pixels;
+     /* Clamp */
+     if(col+copy_size > origin_x+limit_x)
+	copy_size = (origin_x+limit_x) - col;
+     memcpy(panel_set_buffer[line][col],buffer, copy_size*3);
   }
-  if(line < limit_y) {
-     int copy_size = stride < limit_x*3 ? stride : limit_x*3;
-     memcpy(panel_set_buffer[origin_y+line][origin_x],buffer, copy_size);
-  }
-  line++;
 }
 
+/**************************************************************************/
+static void merge_raster(int image_height, int line, unsigned char *buffer, int pixels) {
+   int rep_x, rep_y;
+
+   if(line %20 == 0) {
+      fprintf(stderr,"\rLine %i", line);
+   }
+
+   for(rep_y = 0; rep_y * image_height < limit_y; rep_y++) {
+      for(rep_x = 0; rep_x * pixels < limit_x; rep_x++) {
+         int merge_x = origin_x + rep_x*pixels;
+         int merge_y = origin_y + rep_y*image_height + line;
+	 if(merge_y < origin_y + limit_y)
+           put_scanline_someplace(merge_y, merge_x, buffer, pixels);
+      }
+   }
+}
+
+/**************************************************************************/
 static void my_error_exit (j_common_ptr cinfo)
 {
   /* cinfo->err really points to a my_error_mgr struct, so coerce pointer */
@@ -96,17 +115,32 @@ static void set_pixel(int x, int y, unsigned char r, unsigned char g, unsigned c
      panel_set_buffer[y][x][2] = b;
 }
 /*****************************************************************/
-static void borders(unsigned char r, unsigned char g, unsigned char b) {
+static void borders(unsigned char red, unsigned char green, unsigned char blue) {
   int x,y;
+  int t,l,b,r;
+  l = origin_x;
+  t = origin_y;
+  r = origin_x+limit_x-1;
+  b = origin_y+limit_y-1;
+  if(l < 0) l = 0;
+  if(r < 0) r = 0;
+  if(t < 0) t = 0;
+  if(b < 0) b = 0;
 
-  for(x = 0; x < limit_x; x++) {
-     set_pixel(origin_x+x,         origin_y,           r,g,b);
-     set_pixel(origin_x+x,         origin_y+limit_y-1, r,g,b);
+  if(l > IMAGE_WIDTH-1)  l = IMAGE_WIDTH-1;
+  if(r > IMAGE_WIDTH-1)  r = IMAGE_WIDTH-1;
+  if(t > IMAGE_HEIGHT-1) t = IMAGE_HEIGHT-1;
+  if(b > IMAGE_HEIGHT-1) b = IMAGE_HEIGHT-1;
+
+
+  for(x = l; x <= r; x++) {
+     set_pixel(x, t, red, green, blue);
+     set_pixel(x, b, red, green, blue);
   }
 
-  for(y =0 ; y < limit_y; y++) {
-     set_pixel(origin_x,           origin_y+y, r,g,b);
-     set_pixel(origin_x+limit_x-1, origin_y+y, r,g,b);
+  for(y = t+1 ; y < b-1; y++) {
+     set_pixel(l, y, red, green, blue);
+     set_pixel(r, y, red, green, blue);
   }
 }
 /*****************************************************************/
@@ -115,7 +149,7 @@ static int readfile(char *filename) {
   struct jpeg_decompress_struct cinfo;
   struct my_error_mgr jerr;
   JSAMPARRAY buffer;		/* Output row buffer */
-  int row_stride;		/* physical row width in output buffer */
+  int row_stride, line;		/* physical row width in output buffer */
 
   if ((infile = fopen(filename, "rb")) == NULL) {
     fprintf(stderr, "can't open %s\n", filename);
@@ -144,7 +178,8 @@ static int readfile(char *filename) {
 
   while (cinfo.output_scanline < cinfo.output_height) {
     jpeg_read_scanlines(&cinfo, buffer, 1);
-    put_scanline_someplace(buffer[0], row_stride);
+    merge_raster(cinfo.output_height, line, buffer[0], row_stride/3);
+    line++;
   }
 
   jpeg_finish_decompress(&cinfo);
@@ -160,15 +195,16 @@ static void generate_preview(void) {
    for(y = 0; y < IMAGE_HEIGHT; y++) {
      for(x = 0; x < IMAGE_WIDTH; x++) {
        preview_work[y/PREVIEW_SCALE][x/PREVIEW_SCALE][0] += panel_set_buffer[y][x][0];
+       preview_work[y/PREVIEW_SCALE][x/PREVIEW_SCALE][1] += panel_set_buffer[y][x][1];
+       preview_work[y/PREVIEW_SCALE][x/PREVIEW_SCALE][2] += panel_set_buffer[y][x][2];
      }
    }
 
    for(y = 0; y < PREVIEW_HEIGHT; y++) {
      for(x = 0; x < PREVIEW_WIDTH; x++) {
-	preview_buffer[y][x][0] = preview_work[y][x][0] / 256;
-	preview_buffer[y][x][0] = preview_work[y][x][0] / 256;
-	preview_buffer[y][x][0] = preview_work[y][x][0] / 256;
-	preview_buffer[y][x][0] = preview_work[y][x][0] / 256;
+	preview_buffer[y][x][0] = preview_work[y][x][0] / (PREVIEW_SCALE*PREVIEW_SCALE);
+	preview_buffer[y][x][1] = preview_work[y][x][1] / (PREVIEW_SCALE*PREVIEW_SCALE);
+	preview_buffer[y][x][2] = preview_work[y][x][2] / (PREVIEW_SCALE*PREVIEW_SCALE);
      }
    }
 }
@@ -266,7 +302,8 @@ int main(int argc, char *argv[]) {
    }
 
    /* Process each element */
-   for(i = 0; r[i].image < 1; i++) {
+   for(i = 0; r[i].image > 0; i++) {
+      fprintf(stderr,"Process component %i\n",i);
       limit_x  = r[i].limit_x;
       limit_y  = r[i].limit_y;
       origin_x = r[i].origin_x;
