@@ -1,3 +1,4 @@
+#include <sys/time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <setjmp.h>
@@ -80,10 +81,6 @@ static void put_scanline_someplace(int line, int col, unsigned char *buffer, int
 static void merge_raster(int image_height, int line, unsigned char *buffer, int pixels) {
    int rep_x, rep_y;
 
-   if(line %20 == 0) {
-      fprintf(stderr,"\rLine %i", line);
-   }
-
    for(rep_y = 0; rep_y * image_height < limit_y; rep_y++) {
       for(rep_x = 0; rep_x * pixels < limit_x; rep_x++) {
          int merge_x = origin_x + rep_x*pixels;
@@ -156,7 +153,6 @@ static int readfile(char *filename) {
     return 0;
   }
   line = 0;
-  fprintf(stderr, "Processing file %s\n", filename);
 
   cinfo.err = jpeg_std_error(&jerr.pub);
   jerr.pub.error_exit = my_error_exit;
@@ -171,6 +167,13 @@ static int readfile(char *filename) {
 
   (void) jpeg_read_header(&cinfo, TRUE);
   (void) jpeg_start_decompress(&cinfo);
+  fprintf(stderr,"    Image is %i x %i pixels\n",    cinfo.output_width, cinfo.output_height);
+  fprintf(stderr,"    Metadata image density %i x %i DPI\n",  cinfo.X_density,    cinfo.Y_density);
+  if(cinfo.X_density != 300 &&  cinfo.Y_density != 300) {
+     fprintf(stderr,"    NOTE: Preferred image density is 300 x 300 DPI - please check image scale\n");
+  } 
+  fprintf(stderr,"    Tile repeat will be %5.1fmm horizontally and %5.1fmm vertically\n",    cinfo.output_width/300.0*25.4, cinfo.output_height/300.0*25.4);
+
 
   row_stride = cinfo.output_width * cinfo.output_components;
   buffer = (*cinfo.mem->alloc_sarray)
@@ -288,8 +291,13 @@ static int  write_JPEG_file (char * filename, int quality)
 int main(int argc, char *argv[]) {
    int i;
    struct layout_entry *r = NULL;
+   struct timeval tv_start, tv_end, duration;
 
-   fprintf(stderr, "Emptying target image\n");
+   gettimeofday(&tv_start,NULL);
+   fprintf(stderr, "Rapport creation report:\n");
+   fprintf(stderr, "========================\n");
+   fprintf(stderr, "\n");
+
    memset(panel_set_buffer,255,sizeof(panel_set_buffer));
 
    switch(argc) {
@@ -303,7 +311,7 @@ int main(int argc, char *argv[]) {
 
    /* Process each element */
    for(i = 0; r[i].image > 0; i++) {
-      fprintf(stderr,"Process component %i\n",i);
+      fprintf(stderr,"Process image %i:\n",i+1);
       limit_x  = r[i].limit_x;
       limit_y  = r[i].limit_y;
       origin_x = r[i].origin_x;
@@ -313,7 +321,7 @@ int main(int argc, char *argv[]) {
          exit(3);
       }
       if(!readfile(argv[r[i].image])) {
-         fprintf(stderr, "Exiting with error\n");
+         fprintf(stderr, "ERROR: Unable to open the image\n");
          exit(3);
       }
       borders(0,0,0); 
@@ -322,5 +330,14 @@ int main(int argc, char *argv[]) {
    generate_preview();
    write_preview_JPEG_file("preview.jpg",200);
    write_JPEG_file("out.jpg",200);
+   gettimeofday(&tv_end,NULL);
+   if(tv_end.tv_usec < tv_start.tv_usec) {
+      duration.tv_usec = (tv_end.tv_usec - tv_start.tv_usec)+1000000;
+      duration.tv_sec  = (tv_end.tv_sec  - tv_start.tv_sec)+1;
+   } else {
+      duration.tv_usec = (tv_end.tv_usec - tv_start.tv_usec);
+      duration.tv_sec  = (tv_end.tv_sec  - tv_start.tv_sec);
+   }
+   fprintf(stderr, "Processing complete in %i.%03i seconds\n\n", (int)duration.tv_sec, (int)duration.tv_usec/1000);
    return 0;
 }
