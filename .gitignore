@@ -1,2 +1,4 @@
 image_stitch
 read_spec
+image_stitch.o
+read_spec.o

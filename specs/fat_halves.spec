@@ -1,4 +1,4 @@
 Two fat halves
-# Image, X, Y, Width, Height
-1,  0, 0, 75,  100
-2, 75, 0, 75,  100
+# Image, X, Y, Width, Height, in mm
+1,   0,  0, 750,  1000
+2, 750,  0, 750,  1000

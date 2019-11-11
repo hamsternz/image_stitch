@@ -4,6 +4,7 @@
 #include <setjmp.h>
 #include <memory.h>
 #include <jpeglib.h>
+#include "read_spec.h"
 
 #define PANEL_50  (5906)
 #define PANEL_75  (8859)
@@ -20,35 +21,6 @@
 static unsigned char panel_set_buffer[IMAGE_HEIGHT][IMAGE_WIDTH][3];
 static unsigned int  preview_work[PREVIEW_HEIGHT][PREVIEW_WIDTH][3];
 static unsigned char preview_buffer[PREVIEW_HEIGHT][PREVIEW_WIDTH][3];
-/**************************************************************************/
-struct layout_entry {
-   int image;
-   int origin_x, origin_y, limit_x,limit_y;
-};
-
-static struct layout_entry rapport_two[3] = {
-   { 1, PANEL_75*0, 0, PANEL_75,  PANEL_100},
-   { 2, PANEL_75*1, 1, PANEL_75,  PANEL_100},
-   { 0, 0,0,0,0}
-};
-
-static struct layout_entry rapport_three[4] = {
-   { 1, PANEL_50*0, PANEL_50*0, PANEL_50,  PANEL_50},
-   { 2, PANEL_50*0, PANEL_50*1, PANEL_50,  PANEL_50},
-   { 3, PANEL_50*1, PANEL_50*0, PANEL_100, PANEL_100},
-   { 0,0,0,0}
-};
-
-static struct layout_entry rapport_six[7] = {
-   { 1, PANEL_50*0, PANEL_50*0, PANEL_50, PANEL_50},
-   { 2, PANEL_50*1, PANEL_50*0, PANEL_50, PANEL_50},
-   { 3, PANEL_50*2, PANEL_50*0, PANEL_50, PANEL_50},
-   { 4, PANEL_50*1, PANEL_50*1, PANEL_50, PANEL_50},
-   { 5, PANEL_50*2, PANEL_50*1, PANEL_50, PANEL_50},
-   { 6, PANEL_50*3, PANEL_50*1, PANEL_50, PANEL_50},
-   { 0,0,0,0}
-};
-
 
 /**************************************************************************/
 struct my_error_mgr {
@@ -289,38 +261,39 @@ static int  write_JPEG_file (char * filename, int quality)
 
 /*****************************************************************************/
 int main(int argc, char *argv[]) {
-   int i;
-   struct layout_entry *r = NULL;
+   struct spec *s;
+   struct region *r;
    struct timeval tv_start, tv_end, duration;
 
    gettimeofday(&tv_start,NULL);
    fprintf(stderr, "Rapport creation report:\n");
    fprintf(stderr, "========================\n");
    fprintf(stderr, "\n");
-
+   
    memset(panel_set_buffer,255,sizeof(panel_set_buffer));
-
-   switch(argc) {
-      case 7: r = rapport_six;     break;
-      case 3: r = rapport_two;     break;
-      case 4: r = rapport_three;   break;
-      default:
-         fprintf(stderr, "Unknown set of file names\n");
-         exit(3);
+  
+   if(argc == 1) {
+      fprintf(stderr,"No spec file supplied\n");
+      exit(3);
+   } 
+   s = read_spec(argv[1]);
+   if(s == NULL) {
+     fprintf(stderr, "Unable to read spec file\n");
+     exit(3);
    }
 
    /* Process each element */
-   for(i = 0; r[i].image > 0; i++) {
-      fprintf(stderr,"Process image %i:\n",i+1);
-      limit_x  = r[i].limit_x;
-      limit_y  = r[i].limit_y;
-      origin_x = r[i].origin_x;
-      origin_y = r[i].origin_y;
-      if(r[i].image >= argc) {
+   for(r = s->first_region; r != NULL; r = r->next) {
+      fprintf(stderr,"Process image %i:\n",r->image);
+      limit_x  = r->limit_x;
+      limit_y  = r->limit_y;
+      origin_x = r->origin_x;
+      origin_y = r->origin_y;
+      if(r->image+1 >= argc) {
          fprintf(stderr, "Not enough command line arguments\n");
          exit(3);
       }
-      if(!readfile(argv[r[i].image])) {
+      if(!readfile(argv[r->image+1])) {
          fprintf(stderr, "ERROR: Unable to open the image\n");
          exit(3);
       }
