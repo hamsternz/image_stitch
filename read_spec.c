@@ -189,7 +189,9 @@ int process_line(void) {
    r->limit_x      = (int)((x+w)*(300.0/25.4))-r->origin_x;
    r->limit_y      = (int)((y+h)*(300.0/25.4))-r->origin_y;
 
+#if 0
    printf("%i %i %i %i %i\n", r->image, r->origin_x, r->origin_y, r->limit_x, r->limit_y);
+#endif
 
    r->next = NULL;
    if(work_in_progress_spec->first_region == NULL) {
