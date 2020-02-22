@@ -4,11 +4,9 @@
 #include <setjmp.h>
 #include <memory.h>
 #include <jpeglib.h>
-
-#include "ui.h"
 #include "read_spec.h"
 
-#define PANEL_50  (5906)
+#define PANEL_50  (5908)
 #define PANEL_75  (PANNEL_50*3/2)
 #define PANEL_100 (PANEL_50*2)
 #define PANEL_150 (PANEL_50*3)
@@ -23,6 +21,7 @@
 static unsigned char panel_set_buffer[IMAGE_HEIGHT][IMAGE_WIDTH][3];
 static unsigned int  preview_work[PREVIEW_HEIGHT][PREVIEW_WIDTH][3];
 static unsigned char preview_buffer[PREVIEW_HEIGHT][PREVIEW_WIDTH][3];
+
 /**************************************************************************/
 struct my_error_mgr {
   struct jpeg_error_mgr pub;	/* "public" fields */
@@ -37,16 +36,46 @@ static int origin_y;
 static int limit_x;
 static int limit_y;
 
+int make_transparent = 0;
+int first_pixel = 1;
+unsigned char t_r, t_g, t_b;
 
 /**************************************************************************/
+int not_transparent(unsigned char *a) {
+   if(a[0] != t_r) return 1;
+   if(a[1] != t_g) return 1;
+   if(a[2] != t_b) return 1;
+   return 0;
+}
+/**************************************************************************/
 static void put_scanline_someplace(int line, int col, unsigned char *buffer, int pixels) {
+  if(make_transparent == 1) {
+    if(first_pixel) {
+       t_r = buffer[0];
+       t_g = buffer[1];
+       t_b = buffer[2];
+       first_pixel = 9;
+    }
+  }
+
   if(line < IMAGE_HEIGHT) {
      int copy_size;
+     int i;
      copy_size = pixels;
      /* Clamp */
      if(col+copy_size > origin_x+limit_x)
 	copy_size = (origin_x+limit_x) - col;
-     memcpy(panel_set_buffer[line][col],buffer, copy_size*3);
+     if(make_transparent) {
+        for(i = 0; i < copy_size; i++) {
+   	   if(not_transparent(buffer+3*i)) {
+              panel_set_buffer[line][col+i][0] = buffer[3*i+0];
+              panel_set_buffer[line][col+i][1] = buffer[3*i+1];
+              panel_set_buffer[line][col+i][2] = buffer[3*i+2];
+           }
+        }
+     } else {
+        memcpy(panel_set_buffer[line][col],buffer, copy_size*3);
+     }
   }
 }
 
@@ -261,7 +290,8 @@ static int  write_JPEG_file (char * filename, int quality)
 }
 
 /*****************************************************************************/
-int generate(struct spec *s, int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
+   struct spec *s;
    struct region *r;
    struct timeval tv_start, tv_end, duration;
 
@@ -271,11 +301,16 @@ int generate(struct spec *s, int argc, char *argv[]) {
    fprintf(stderr, "\n");
    
    memset(panel_set_buffer,255,sizeof(panel_set_buffer));
- 
+  
    if(argc == 1) {
       fprintf(stderr,"No spec file supplied\n");
       exit(3);
    } 
+   s = read_spec(argv[1]);
+   if(s == NULL) {
+     fprintf(stderr, "Unable to read spec file\n");
+     exit(3);
+   }
 
    /* Process each element */
    for(r = s->first_region; r != NULL; r = r->next) {
@@ -284,22 +319,20 @@ int generate(struct spec *s, int argc, char *argv[]) {
       limit_y  = r->limit_y;
       origin_x = r->origin_x;
       origin_y = r->origin_y;
-
-      if(r->image < 1 || r->image > argc) {
+      if(r->image+1 >= argc) {
          fprintf(stderr, "Not enough command line arguments\n");
          exit(3);
       }
-
-      if(!readfile(argv[r->image-1])) {
+      if(!readfile(argv[r->image+1])) {
          fprintf(stderr, "ERROR: Unable to open the image\n");
          exit(3);
       }
-//      borders(0,0,0); 
+      make_transparent = 1;
    }
 
    generate_preview();
-   write_preview_JPEG_file("preview.jpg",200);
-   write_JPEG_file("out.jpg",200);
+   write_preview_JPEG_file("preview_o.jpg",200);
+   write_JPEG_file("out_o.jpg",200);
    gettimeofday(&tv_end,NULL);
    if(tv_end.tv_usec < tv_start.tv_usec) {
       duration.tv_usec = (tv_end.tv_usec - tv_start.tv_usec)+1000000;
@@ -310,22 +343,4 @@ int generate(struct spec *s, int argc, char *argv[]) {
    }
    fprintf(stderr, "Processing complete in %i.%03i seconds\n\n", (int)duration.tv_sec, (int)duration.tv_usec/1000);
    return 0;
-}
-
-/*****************************************************************************/
-int main(int argc, char *argv[]) {
-   struct spec *s;
-   char *spec_name;
-
-   if(argc == 1) {
-      ui(&spec_name);
-   } else {
-      spec_name = argv[1];
-      s = read_spec(spec_name);
-      if(s == NULL) {
-        fprintf(stderr, "Unable to read spec file\n");
-        exit(3);
-      }
-      generate(s, argc-2, argv+2);
-   }
 }

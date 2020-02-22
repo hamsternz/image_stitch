@@ -82,7 +82,7 @@ int process_line(void) {
 	 return 0;
       }
       strcpy(work_in_progress_spec->name, buffer+i);
-      fprintf(stderr,"Reading in spec '%s'\n",buffer);
+      //fprintf(stderr,"Reading in spec '%s'\n",buffer);
       return 1;
    } 
 
